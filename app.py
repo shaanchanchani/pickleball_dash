@@ -209,8 +209,7 @@ def calculate_sos_adjusted_win_percentages(df, min_games):
                 win_percentage = player_stats[player_name]['wins'] / player_stats[player_name]['games']
                 
                 # Calculate cumulative SoS ratio
-                cumulative_sos_ratio = (player_stats[player_name]['opponent_win_pct'] / (player_stats[player_name]['games'] * 2)) / 
-                                       (player_stats[player_name]['teammate_win_pct'] / player_stats[player_name]['games']) if player_stats[player_name]['games'] > 0 else 1
+                cumulative_sos_ratio = (player_stats[player_name]['opponent_win_pct'] / (player_stats[player_name]['games'] * 2)) / (player_stats[player_name]['teammate_win_pct'] / player_stats[player_name]['games']) if player_stats[player_name]['games'] > 0 else 1
                 
                 sos_adjusted_win_percentage = win_percentage * cumulative_sos_ratio * 100
                 
