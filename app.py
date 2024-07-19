@@ -176,12 +176,11 @@ def plot_win_percentages_by_games(df, min_games):
     fig.update_xaxes(rangeslider_visible=True)
     
     return fig
-
 def calculate_sos_adjusted_win_percentages(df, min_games):
     qualified_players = get_qualified_players(df, min_games)
     filtered_df = filter_dataframe(df, qualified_players)
     
-    player_stats = {player: {'wins': 0, 'games': 0, 'sos_sum': 0, 'percentages': []} for player in qualified_players}
+    player_stats = {player: {'wins': 0, 'games': 0, 'teammate_win_pct': 0, 'opponent_win_pct': 0, 'percentages': []} for player in qualified_players}
     
     for _, row in filtered_df.iterrows():
         winning_team = row['Winner']
@@ -195,23 +194,41 @@ def calculate_sos_adjusted_win_percentages(df, min_games):
                     player_stats[player_name]['wins'] += 1
                 
                 # Calculate SoS for this game
+                teammate = row[f'Team {team} Player {3-player}']
+                teammate_win_pct = player_stats[teammate]['wins'] / player_stats[teammate]['games'] if player_stats[teammate]['games'] > 0 else 0
+                player_stats[player_name]['teammate_win_pct'] += teammate_win_pct
+                
                 opponent_win_pcts = [
                     player_stats[row[f'Team {opponent_team} Player {i}']]['wins'] / 
                     player_stats[row[f'Team {opponent_team} Player {i}']]['games']
                     if player_stats[row[f'Team {opponent_team} Player {i}']]['games'] > 0 else 0
                     for i in [1, 2]
                 ]
-                game_sos = sum(opponent_win_pcts) / 2
-                
-                player_stats[player_name]['sos_sum'] += game_sos
+                player_stats[player_name]['opponent_win_pct'] += sum(opponent_win_pcts)
                 
                 win_percentage = player_stats[player_name]['wins'] / player_stats[player_name]['games']
-                cumulative_sos = player_stats[player_name]['sos_sum'] / player_stats[player_name]['games']
-                sos_adjusted_win_percentage = win_percentage * cumulative_sos * 100
+                
+                # Calculate cumulative SoS ratio
+                cumulative_sos_ratio = (player_stats[player_name]['opponent_win_pct'] / (player_stats[player_name]['games'] * 2)) / 
+                                       (player_stats[player_name]['teammate_win_pct'] / player_stats[player_name]['games']) if player_stats[player_name]['games'] > 0 else 1
+                
+                sos_adjusted_win_percentage = win_percentage * cumulative_sos_ratio * 100
                 
                 player_stats[player_name]['percentages'].append(sos_adjusted_win_percentage)
-
-    return player_stats
+    
+    return pd.DataFrame([
+        {
+            'Player': player,
+            'SoS Adjusted Win %': stats['percentages'][-1] if stats['percentages'] else 0,
+            'Win %': (stats['wins'] / stats['games'] * 100) if stats['games'] > 0 else 0,
+            'Total Games': stats['games'],
+            'Wins': stats['wins'],
+            'SoS Ratio': (stats['opponent_win_pct'] / (stats['games'] * 2)) / 
+                         (stats['teammate_win_pct'] / stats['games']) if stats['games'] > 0 else 1
+        }
+        for player, stats in player_stats.items()
+    ]).sort_values('SoS Adjusted Win %', ascending=False)
+    
 def display_sos_calculation(player_data):
     st.markdown(f"### SoS for {player_data['Player']}")
     
