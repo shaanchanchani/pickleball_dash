@@ -23,9 +23,9 @@ def filter_dataframe(df, qualified_players):
 def calculate_win_percentages(df, min_games):
     qualified_players = get_qualified_players(df, min_games)
     filtered_df = filter_dataframe(df, qualified_players)
-    
+
     player_stats = {player: {'wins': 0, 'total_games': 0, 'games': []} for player in qualified_players}
-    
+
     for _, row in filtered_df.iterrows():
         winning_team = row['Winner']
         for team in [1, 2]:
@@ -35,7 +35,7 @@ def calculate_win_percentages(df, min_games):
                 player_stats[player_name]['games'].append(row.to_dict())
                 if winning_team == f"Team {team}":
                     player_stats[player_name]['wins'] += 1
-    
+
     stats_df = pd.DataFrame([
         {
             'Player': player,
@@ -50,27 +50,27 @@ def calculate_win_percentages(df, min_games):
 def calculate_strength_of_schedule(df, stats_df, min_games):
     qualified_players = get_qualified_players(df, min_games)
     filtered_df = filter_dataframe(df, qualified_players)
-    
+
     player_sos = {player: {'teammate_win_pct': 0, 'opponent_win_pct': 0, 'games_played': 0, 
                            'teammates': [], 'opponents': []} for player in qualified_players}
-    
+
     for _, row in filtered_df.iterrows():
         for team in [1, 2]:
             for player in [1, 2]:
                 current_player = row[f'Team {team} Player {player}']
-                
+
                 teammate = row[f'Team {team} Player {3-player}']
                 teammate_win_pct = stats_df.loc[stats_df['Player'] == teammate, 'Win %'].values[0]
                 player_sos[current_player]['teammate_win_pct'] += teammate_win_pct
                 player_sos[current_player]['teammates'].append((teammate, teammate_win_pct))
-                
+
                 opp_team = 3 - team
                 for opp_player in [1, 2]:
                     opponent = row[f'Team {opp_team} Player {opp_player}']
                     opp_win_pct = stats_df.loc[stats_df['Player'] == opponent, 'Win %'].values[0]
                     player_sos[current_player]['opponent_win_pct'] += opp_win_pct
                     player_sos[current_player]['opponents'].append((opponent, opp_win_pct))
-                
+
                 player_sos[current_player]['games_played'] += 1
 
     sos_df = pd.DataFrame([
@@ -91,19 +91,19 @@ def calculate_strength_of_schedule(df, stats_df, min_games):
 def calculate_win_percentages_by_games(df, min_games):
     qualified_players = get_qualified_players(df, min_games)
     filtered_df = filter_dataframe(df, qualified_players)
-    
+
     player_stats = {player: {'wins': 0, 'games': 0, 'percentages': []} for player in qualified_players}
-    
+
     for _, row in filtered_df.iterrows():
         winning_team = row['Winner']
         for team in [1, 2]:
             for player in [1, 2]:
                 player_name = row[f'Team {team} Player {player}']
-                
+
                 player_stats[player_name]['games'] += 1
                 if winning_team == f"Team {team}":
                     player_stats[player_name]['wins'] += 1
-                
+
                 win_percentage = (player_stats[player_name]['wins'] / player_stats[player_name]['games']) * 100
                 player_stats[player_name]['percentages'].append(win_percentage)
 
@@ -116,16 +116,16 @@ def get_distinct_colors(n):
 
 def plot_win_percentages_by_games(df, min_games):
     player_data = calculate_win_percentages_by_games(df, min_games)
-    
+
     fig = go.Figure()
-    
+
     colors = get_distinct_colors(len(player_data))
     max_games = max(len(data['percentages']) for data in player_data.values())
-    
+
     for (player, data), color in zip(player_data.items(), colors):
         games = list(range(1, len(data['percentages']) + 1))
         win_percentages = data['percentages']
-        
+
         fig.add_trace(go.Scatter(
             x=games,
             y=win_percentages,
@@ -137,7 +137,7 @@ def plot_win_percentages_by_games(df, min_games):
                           'Win %: %{y:.1f}%<extra></extra>',
             text=[player] * len(games)
         ))
-    
+
     fig.update_layout(
         title=f'Win % by Games Played',
         xaxis_title='Games Played',
@@ -172,70 +172,49 @@ def plot_win_percentages_by_games(df, min_games):
         #     )
         # ]
     )
-    
+
     fig.update_xaxes(rangeslider_visible=True)
-    
+
     return fig
+
 def calculate_sos_adjusted_win_percentages(df, min_games):
     qualified_players = get_qualified_players(df, min_games)
     filtered_df = filter_dataframe(df, qualified_players)
-    
-    player_stats = {player: {'wins': 0, 'games': 0, 'teammate_win_pct': 0, 'opponent_win_pct': 0, 'percentages': []} for player in qualified_players}
-    
+
+    player_stats = {player: {'wins': 0, 'games': 0, 'sos_sum': 0, 'percentages': []} for player in qualified_players}
+
     for _, row in filtered_df.iterrows():
         winning_team = row['Winner']
         for team in [1, 2]:
             opponent_team = 3 - team
             for player in [1, 2]:
                 player_name = row[f'Team {team} Player {player}']
-                
+
                 player_stats[player_name]['games'] += 1
                 if winning_team == f"Team {team}":
                     player_stats[player_name]['wins'] += 1
-                
+
                 # Calculate SoS for this game
-                teammate = row[f'Team {team} Player {3-player}']
-                teammate_win_pct = player_stats[teammate]['wins'] / player_stats[teammate]['games'] if player_stats[teammate]['games'] > 0 else 0
-                player_stats[player_name]['teammate_win_pct'] += teammate_win_pct
-                
                 opponent_win_pcts = [
                     player_stats[row[f'Team {opponent_team} Player {i}']]['wins'] / 
                     player_stats[row[f'Team {opponent_team} Player {i}']]['games']
                     if player_stats[row[f'Team {opponent_team} Player {i}']]['games'] > 0 else 0
                     for i in [1, 2]
                 ]
-                player_stats[player_name]['opponent_win_pct'] += sum(opponent_win_pcts)
-                
-                win_percentage = player_stats[player_name]['wins'] / player_stats[player_name]['games'] if player_stats[player_name]['games'] > 0 else 0
-                
-                # Calculate cumulative SoS ratio
-                if player_stats[player_name]['games'] > 0:
-                    opponent_win_pct = player_stats[player_name]['opponent_win_pct'] / (player_stats[player_name]['games'] * 2)
-                    teammate_win_pct = player_stats[player_name]['teammate_win_pct'] / player_stats[player_name]['games']
-                    cumulative_sos_ratio = opponent_win_pct / teammate_win_pct if teammate_win_pct > 0 else 1
-                else:
-                    cumulative_sos_ratio = 1
-                
-                sos_adjusted_win_percentage = win_percentage * cumulative_sos_ratio * 100
-                
+                game_sos = sum(opponent_win_pcts) / 2
+
+                player_stats[player_name]['sos_sum'] += game_sos
+
+                win_percentage = player_stats[player_name]['wins'] / player_stats[player_name]['games']
+                cumulative_sos = player_stats[player_name]['sos_sum'] / player_stats[player_name]['games']
+                sos_adjusted_win_percentage = win_percentage * cumulative_sos * 100
+
                 player_stats[player_name]['percentages'].append(sos_adjusted_win_percentage)
-    
-    return pd.DataFrame([
-        {
-            'Player': player,
-            'SoS Adjusted Win %': stats['percentages'][-1] if stats['percentages'] else 0,
-            'Win %': (stats['wins'] / stats['games'] * 100) if stats['games'] > 0 else 0,
-            'Total Games': stats['games'],
-            'Wins': stats['wins'],
-            'SoS Ratio': (stats['opponent_win_pct'] / (stats['games'] * 2)) / 
-                         (stats['teammate_win_pct'] / stats['games']) if stats['games'] > 0 and stats['teammate_win_pct'] > 0 else 1
-        }
-        for player, stats in player_stats.items()
-    ]).sort_values('SoS Adjusted Win %', ascending=False)
-    
+
+    return player_stats
 def display_sos_calculation(player_data):
     st.markdown(f"### SoS for {player_data['Player']}")
-    
+
     # Custom CSS for left-aligned labels and right-aligned values
     st.markdown("""
     <style>
@@ -251,15 +230,15 @@ def display_sos_calculation(player_data):
     }
     </style>
     """, unsafe_allow_html=True)
-    
+
     # Display metrics
     col1, col2 = st.columns([1, 1])
-    
+
     with col1:
         st.markdown('<p class="metric-label">Teammate Win %</p>', unsafe_allow_html=True)
         st.markdown('<p class="metric-label">Opponent Win %</p>', unsafe_allow_html=True)
         st.markdown('<p class="metric-label">SoS Ratio</p>', unsafe_allow_html=True)
-    
+
     with col2:
         st.markdown(f'<p class="metric-value">{player_data["Teammate Win %"]:.1f}%</p>', unsafe_allow_html=True)
         st.markdown(f'<p class="metric-value">{player_data["Opponent Win %"]:.1f}%</p>', unsafe_allow_html=True)
@@ -268,16 +247,16 @@ def display_sos_calculation(player_data):
     # Create a dataframe for teammates and opponents
     teammates = Counter(player for player, _ in player_data['Teammates'])
     opponents = Counter(player for player, _ in player_data['Opponents'])
-    
+
     max_length = max(len(teammates), len(opponents))
-    
+
     data = {
         'Teammates': [f"{player} ({count})" for player, count in teammates.items()] + [''] * (max_length - len(teammates)),
         'Opponents': [f"{player} ({count})" for player, count in opponents.items()] + [''] * (max_length - len(opponents))
     }
-    
+
     df = pd.DataFrame(data)
-    
+
     st.table(df)
 
 
@@ -309,7 +288,7 @@ def main():
                               min_value=1, 
                               max_value=int(df['Team 1 Player 1'].value_counts().max()), 
                               value=1)
-        
+
         qualified_players = get_qualified_players(df, min_games)
         selected_player = st.selectbox("Select player for SoS calculation:", 
                                        sorted(qualified_players))
@@ -326,7 +305,7 @@ def main():
         sos_adjusted_stats = calculate_sos_adjusted_win_percentages(df, min_games)
         fig_sos_adjusted = go.Figure()
         colors = get_distinct_colors(len(sos_adjusted_stats))
-        
+
         for (player, data), color in zip(sos_adjusted_stats.items(), colors):
             games = list(range(1, len(data['percentages']) + 1))
             fig_sos_adjusted.add_trace(go.Scatter(
@@ -334,13 +313,13 @@ def main():
                 y=data['percentages'],
                 mode='lines',
                 name=player,
-             
+
                 line=dict(shape='spline', smoothing=1.3, color=color),
 
                 hovertemplate='<b>%{text}</b><br>Games Played: %{x}<br>SoS Adjusted Win %: %{y:.1f}%<extra></extra>',
                 text=[player] * len(games)
             ))
-        
+
         fig_sos_adjusted.update_layout(
             title=f'Adjusted Win % by SoS',
             xaxis_title='Games Played',
@@ -410,6 +389,6 @@ def main():
 
     # Display the filtered dataframe
     st.dataframe(filtered_df)
-    
+
 if __name__ == "__main__":
     main()
